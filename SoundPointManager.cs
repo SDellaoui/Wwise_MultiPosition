@@ -15,28 +15,31 @@ public class SPMultiPosEvent
 }
 
 public class SoundPointManager : MonoBehaviour {
-    private static SoundPointManager _instance;
-    public static SoundPointManager Instance { get { return _instance; } }
 
-    public SortedList<string,List<SoundPoint>> soundpointList;
-
-    static public Dictionary<string, SPMultiPosEvent> multiPosEventTree = new Dictionary<string, SPMultiPosEvent>();
-
+    #region Singleton
+    public static SoundPointManager Instance;
     private void Awake()
     {
-        if (_instance != null && _instance != this)
+        if (Instance == null)
         {
-            Destroy(this.gameObject);
+            Instance = this;
+            DontDestroyOnLoad(this.gameObject);
         }
         else
         {
-            _instance = this;
+            Destroy(this.gameObject);
         }
     }
+    #endregion
+
+    public SortedList<string, List<SoundPoint>> soundpointList;
+
+    static public Dictionary<string, SPMultiPosEvent> multiPosEventTree = new Dictionary<string, SPMultiPosEvent>();
 
     // Use this for initialization
     void Start(){
         soundpointList = new SortedList<string, List<SoundPoint>>();
+        Debug.Log("Soundpoint manager instantiated");
     }
 	// Update is called once per frame
 	void Update () {
@@ -48,7 +51,7 @@ public class SoundPointManager : MonoBehaviour {
         SoundPoint sp = soundpointGO.GetComponent<SoundPoint>();
 
         SPMultiPosEvent eventPosList;
-        if (multiPosEventTree.TryGetValue(sp.eventName, out eventPosList))
+        if (multiPosEventTree.TryGetValue(sp.startEvent.Name, out eventPosList))
         {
             if (!eventPosList.list.Contains(sp))
             {
@@ -65,7 +68,7 @@ public class SoundPointManager : MonoBehaviour {
                 eventPosList.parentSoundPoint = sp;
             else if (eventPosList.parentSoundPoint != null && sp.isParentgameObject)
                 sp.isParentgameObject = false;
-            multiPosEventTree.Add(sp.eventName, eventPosList);
+            multiPosEventTree.Add(sp.startEvent.Name, eventPosList);
         }
         Debug.Log("for Soundpoint : " + soundpointGO.name+" parent soundpoint : "+eventPosList.parentSoundPoint);
         if (eventPosList.parentSoundPoint != null)
@@ -76,7 +79,7 @@ public class SoundPointManager : MonoBehaviour {
     {
         SoundPoint sp = soundpointGO.GetComponent<SoundPoint>();
         SPMultiPosEvent eventPosList;
-        if (!multiPosEventTree.TryGetValue(sp.eventName, out eventPosList))
+        if (!multiPosEventTree.TryGetValue(sp.startEvent.Name, out eventPosList))
             return;
         eventPosList.list.Remove(sp);
 
@@ -87,10 +90,11 @@ public class SoundPointManager : MonoBehaviour {
     {
         UpdateMultiPosition(soundpoint);
     }
+
     //Update multiposition for parent destroyed
     void UpdateMultiPosition(SoundPoint soundpoint)
     {
-        SPMultiPosEvent eventPosList = multiPosEventTree[soundpoint.eventName];
+        SPMultiPosEvent eventPosList = multiPosEventTree[soundpoint.startEvent.Name];
 
         SoundPoint parentSoundPoint = eventPosList.parentSoundPoint;
 
@@ -107,7 +111,7 @@ public class SoundPointManager : MonoBehaviour {
 
     void SetMultiPosition(SoundPoint soundpoint)
     {
-        SPMultiPosEvent multiPosEvent = multiPosEventTree[soundpoint.eventName];
+        SPMultiPosEvent multiPosEvent = multiPosEventTree[soundpoint.startEvent.Name];
         SoundPoint soundPointParent = multiPosEvent.parentSoundPoint;
         AkGameObj[] gameObj = soundpoint.gameObject.GetComponents<AkGameObj>();
         for (int i = 0; i < gameObj.Length; i++)
@@ -117,16 +121,19 @@ public class SoundPointManager : MonoBehaviour {
         AkSoundEngine.SetMultiplePositions(soundPointParent.gameObject, positionArray, (ushort)positionArray.Count, AkMultiPositionType.MultiPositionType_MultiSources);
         if (!multiPosEvent.eventIsPlaying)
         {
-            AkSoundEngine.PostEvent(soundpoint.eventName, soundPointParent.gameObject, (uint)AkCallbackType.AK_EndOfEvent, AKCallBackFinishedPlaying, null, 0, null, AkSoundEngine.AK_INVALID_PLAYING_ID);
+            soundpoint.startEvent.Post(soundPointParent.gameObject, (uint)AkCallbackType.AK_EndOfEvent, AKCallBackFinishedPlaying);
+            //AkSoundEngine.PostEvent(soundpoint.eventName, soundPointParent.gameObject, (uint)AkCallbackType.AK_EndOfEvent, AKCallBackFinishedPlaying, null, 0, null, AkSoundEngine.AK_INVALID_PLAYING_ID);
+            //AkSoundEngine.PostEvent()
             multiPosEvent.eventIsPlaying = true;
         }
     }
 
     void DestroySoundPoint(SoundPoint sp)
     {
-        AkSoundEngine.PostEvent(sp.stopEventName, sp.gameObject);
+        //AkSoundEngine.PostEvent(sp.stopEventName, sp.gameObject);
+        sp.stopEvent.Post(sp.gameObject);
         Destroy(sp.gameObject);
-        multiPosEventTree.Remove(sp.eventName);
+        multiPosEventTree.Remove(sp.startEvent.Name);
     }
 
     public AkPositionArray BuildMultiplePositions(List<SoundPoint> multiPositionList)
